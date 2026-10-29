@@ -1,135 +1,126 @@
-#!/usr/bin/env python3
+#!/usr/init/env python3
+# /// script
+# dependencies = [
+#     "requests",
+# ]
+# ///
 """
-NoirTerminal - Your Spooky Terminal Commentary Bot
+NoirTerminal - Haunted Terminal Proxy (Strictly English Artistic Edition)
+Keeps real command output safe inside a clean ASCII frame, while the LLM 
+generates rich, dynamic ASCII art and English gothic Halloween flair.
+"""
 
-A lightweight shell companion that whispers creepy, noir, or ghost-story commentary
-on your terminal commands using local open-weight models (Ollama/LM Studio).
-
-Installation:
-    pip install requests httpx aioshutil
-
-Usage:
-    python noir_terminal.py
-
-Requirements:
-    - Ollama installed with a small model (gemma, tinyllama, phi, etc.)
-    """
-
+import sys
 import subprocess
-import random
+import argparse
+import requests
+import json
 
-# Import modular components
-from commands import (
-    get_command_templates,
-    GHOST_STORY_TEMPLATES,
-)
-from llm_client import select_server, make_llm_call, get_ollama_models
+LM_STUDIO_API_URL = "http://localhost:1234/v1/chat/completions"
 
+def get_dynamic_haunting(command: str) -> dict:
+    """Asks the LLM to generate custom English ASCII art, emojis, and theatrical flair."""
+    system_prompt = (
+        "You are an avant-garde digital phantom haunting a computer terminal. "
+        "You MUST respond ONLY in English. Do not use any other language or non-English characters. "
+        "For the given command, generate a JSON object with 4 keys:\n"
+        "- 'intro_art': A rich, multi-line English ASCII art piece (skulls, ghosts, bats, pumpkins, or webs) related to the command.\n"
+        "- 'top_title': A dramatic, spooky English title for the top border above the real command output.\n"
+        "- 'bottom_title': A dramatic English title for the bottom border below the real output.\n"
+        "- 'flavor_text': A theatrical, creepy English footer warning packed with emojis (💀, 👻, 🦇, 🕯️, 🔮).\n"
+        "Return ONLY valid JSON. No markdown blocks, no extra text."
+    )
 
-def generate_commentary(command: str) -> str:
-    """Generate spooky commentary for a command"""
-    
+    payload = {
+        "model": "qwen2.5-3b-instruct",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Command executed: {command}"}
+        ],
+        "temperature": 0.9,
+        "max_tokens": 400,
+        "stream": False
+    }
+
     try:
-        # Try to get templates from NOIR_COMMENTARY dictionary
-        templates = get_command_templates(command)
-        commentary = random.choice(templates)
-        return commentary
-        
-    except KeyError:
-        # Command not found in templates, use LLM for dynamic generation
-        prompt = f"""You are a noir detective / ghost narrator. 
-        React to this terminal command with a short, spooky one-liner commentary: {command}
-
-Respond with exactly 1 of the following formats (no explanations):
-- 👻 *The shadows whisper...* [commentary]
-- 🎭 *[Commentary]*
-- 💀 *[Commentary]*
-
-Example responses for reference:
-- `ls`: "👻 *Here comes the digital denizens*..."
-- `rm`: "💀 *Don't do it!* Those files have stories..."
-- `cat`: "👻 *The shadows reveal their secrets*..."
-
-For this command: {command}"""
-        
-        server = select_server()
-        if server:
-            commentary = make_llm_call(prompt, "", server)
-            if not commentary:
-                # Fallback to random template
-                return random.choice(GHOST_STORY_TEMPLATES['random'])
-        else:
-            return random.choice(GHOST_STORY_TEMPLATES['random'])
-    
-    return commentary
-
-
-def is_interactive_shell() -> bool:
-    """Check if we're in an interactive shell"""
-    try:
-        result = subprocess.run(
-            ['ps', '1'],
-            capture_output=True,
-            text=True
-        )
-        return 'bash' in result.stdout.lower() or 'zsh' in result.stdout.lower() or 'fish' in result.stdout.lower()
+        response = requests.post(LM_STUDIO_API_URL, json=payload, timeout=20)
+        if response.status_code == 200:
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            if content.startswith("```json"): content = content[7:]
+            if content.startswith("```"): content = content[3:]
+            if content.endswith("```"): content = content[:-3]
+            return json.loads(content.strip())
     except Exception:
-        return False
-
+        pass
+    
+    return {
+        "intro_art": "      .---.\n     /     \\\n    | () () |\n     \\  _  /\n      `-'/\n     /     \\\n    |       |\n    \\       /",
+        "top_title": f"HAUNTED CRYPT ACCESS: {command}",
+        "bottom_title": "VAULT SEALED",
+        "flavor_text": "💀🦇 The digital veil tears open, and the spirits whisper your commands into the dark abyss... 🕯️🔮"
+    }
 
 def main():
-    """Main entry point"""
+    parser = argparse.ArgumentParser(description="Haunted Terminal Proxy")
+    parser.add_argument("cmd", nargs=argparse.REMAINDER, help="The command to execute")
     
-    print("🎭 NoirTerminal - Your spooky terminal companion")
-    print("💀 This reads commands through local LLMs (Ollama/LM Studio)")
-    print()
-    
-    # Check if we're in an interactive shell
-    if not is_interactive_shell():
-        print("💀 *This script works best in an interactive shell!*")
-        print("💀 Run it from your terminal session.")
-        return
-    
-    print()
-    print("👻 *Initializing... Please wait.*")
-    
-    # Get available models
-    models = get_ollama_models()
-    print(f"🎭 *Detected {len(models)} Ollama model(s): {', '.join(models[:3])}...")
-    
-    if not models and 'gemma' not in [m.lower() for m in ['gemma']]:
-        print("💀 *No models found!* Try: ollama pull gemma:2b or ollama pull tinyllama")
-    
-    # Select server (default to Ollama unless specified)
-    server = select_server(prefer_llmstudio=False)
-    
-    if not server:
-        print("👻 *No LLM connection available.* Exiting.")
-        return
-    
-    print(f"💀 *Connected to {server['type'].upper()} at {server['api_url']}")
-    print()
-    print("🎭 NoirTerminal is ready!")
-    print()
-    print("💀 *To exit: press Ctrl+C*")
-    print()
-    
-    # Keep the process alive - monitor for new commands
-    # This is a simplified version - full implementation would hook into shell events
-    
-    print("👻 *Listening for your commands...*")
-    import time
-    
-    while True:
-        try:
-            # In a real implementation, this would wait for PROMPT_COMMAND or similar
-            # For now, we'll just sleep briefly to keep the process alive
-            time.sleep(1)
-            
-        except KeyboardInterrupt:
-            print("\n🎭 *Shadows fade away...*")
-            break
+    args = parser.parse_args()
+    if not args.cmd:
+        print("👻 *No command provided to haunt.*")
+        sys.exit(1)
+        
+    full_command = " ".join(args.cmd)
 
+    # 1. Execute the command securely and store output in variables
+    if sys.platform == "win32":
+        exec_args = ["powershell", "-Command", full_command]
+    else:
+        exec_args = full_command
+
+    try:
+        result = subprocess.run(
+            exec_args, 
+            capture_output=True, 
+            text=True,
+            shell=(sys.platform != "win32")
+        )
+        saved_stdout = result.stdout
+        saved_stderr = result.stderr
+        return_code = result.returncode
+    except Exception as e:
+        saved_stdout = ""
+        saved_stderr = str(e)
+        return_code = 1
+
+    # 2. Get high-creativity artistic assets from the LLM
+    haunting = get_dynamic_haunting(full_command)
+
+    # 3. Print the dynamic LLM ASCII art introduction
+    print("\n\033[36m" + haunting.get("intro_art", "") + "\033[0m")
+
+    # 4. Format borders with the dynamic LLM titles
+    top_label = f" 🔮 {haunting['top_title']} "
+    bottom_label = f" 👻 {haunting['bottom_title']} "
+    
+    box_width = max(60, len(top_label) + 4, len(bottom_label) + 4)
+    
+    top_border = "╔" + top_label + "═" * max(0, box_width - len(top_label)) + "╗"
+    bottom_border = "╚" + bottom_label + "═" * max(0, box_width - len(bottom_label)) + "╝"
+
+    # 5. Print protected real output inside borders
+    print(f"\033[35m{top_border}\033[0m")
+    
+    if saved_stdout:
+        print(saved_stdout, end="")
+    if saved_stderr:
+        print(saved_stderr, file=sys.stderr, end="")
+
+    print(f"\033[35m{bottom_border}\033[0m")
+    
+    # 6. Print theatrical footer flavor text with emojis outside
+    print(f"\033[33m {haunting['flavor_text']} \033[0m\n")
+
+    sys.exit(return_code)
 
 if __name__ == "__main__":
     main()
