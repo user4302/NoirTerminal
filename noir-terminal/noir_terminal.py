@@ -6,6 +6,8 @@
 # ///
 """
 NoirTerminal - Haunted Terminal Proxy (Configurable Edition)
+Executes terminal commands accurately inside hardcoded ASCII borders while 
+local LLMs dynamically generate file-aware Halloween commentary outside.
 """
 
 import sys
@@ -15,16 +17,19 @@ import argparse
 import requests
 import json
 
-# Load configuration from config.json if available, otherwise use defaults
-CONFIG_FILE = "config.json"
+# Locate configuration relative to the script directory
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
+
 DEFAULT_CONFIG = {
     "api_url": "http://localhost:1234/v1/chat/completions",
     "model": "qwen2.5-3b-instruct",
     "temperature": 0.95,
-    "max_tokens": 400
+    "max_tokens": 300
 }
 
 def load_config():
+    """Loads settings from config.json if present, otherwise uses default config."""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -35,12 +40,12 @@ def load_config():
     return DEFAULT_CONFIG
 
 def get_horrific_haunting(command: str, raw_output: str, config: dict) -> dict:
-    """Sends command and output to LM Studio using external config settings."""
+    """Asks the local LLM for dynamic commentary text outside the hardcoded borders."""
     system_prompt = (
         "You are a terrifying, blood-soaked digital ghost haunting a terminal. "
-        "Analyze the provided command and actual command output (file names, directories, errors). "
-        "Write horrific, chilling, file-aware short sentences mentioning specific file names found in the output. "
-        "Include scattered emojis (💀, 🩸, 👁️, 🕷️, 🕯️, 🔪, 👻). "
+        "Analyze the provided command and actual command output. "
+        "Write horrific, chilling, file-aware short sentences mentioning specific file names found in the output, "
+        "packed with scattered emojis (💀, 🩸, 👁️, 🕷️, 🕯️, 🔪, 👻). "
         "Return a JSON object with EXACTLY these 2 keys:\n"
         '- "top_haunting": A chilling commentary string to display ABOVE the real output.\n'
         '- "bottom_haunting": A terrifying sentence or observation to display BELOW the real output.\n'
@@ -60,20 +65,21 @@ def get_horrific_haunting(command: str, raw_output: str, config: dict) -> dict:
         "stream": False
     }
 
-    response = requests.post(config["api_url"], json=payload, timeout=30)
-    response.raise_for_status()
+    try:
+        response = requests.post(config["api_url"], json=payload, timeout=30)
+        if response.status_code == 200:
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            if content.startswith("```json"): content = content[7:]
+            if content.startswith("```"): content = content[3:]
+            if content.endswith("```"): content = content[:-3]
+            return json.loads(content.strip())
+    except Exception:
+        pass
     
-    data = response.json()
-    content = data["choices"][0]["message"]["content"].strip()
-    
-    if content.startswith("```json"):
-        content = content[7:]
-    if content.startswith("```"):
-        content = content[3:]
-    if content.endswith("```"):
-        content = content[:-3]
-        
-    return json.loads(content.strip())
+    return {
+        "top_haunting": "💀 🩸 The spirits gaze intently upon your command output... 👁️",
+        "bottom_haunting": "🕷️ 🔪 The crypt closes its doors once more. Beware your next step... 👻"
+    }
 
 def main():
     config = load_config()
@@ -88,7 +94,7 @@ def main():
         
     full_command = " ".join(args.cmd)
 
-    # Execute command securely via PowerShell on Windows or shell on Linux/macOS
+    # 1. Execute command securely via PowerShell on Windows or native shell on Linux
     if sys.platform == "win32":
         exec_args = ["powershell", "-Command", full_command]
     else:
@@ -111,13 +117,14 @@ def main():
 
     combined_output = saved_stdout + saved_stderr
 
-    # Get dynamic LLM commentary using config
+    # 2. Query local LLM for dynamic commentary
     haunting = get_horrific_haunting(full_command, combined_output, config)
 
-    # Hardcoded permanent borders
+    # 3. Permanent hardcoded borders
     top_border = "╔══════════════════════════════════════════════════════════╗"
     bottom_border = "╚══════════════════════════════════════════════════════════╝"
 
+    # 4. Output rendering
     print()
     if "top_haunting" in haunting:
         print(f"\033[31m{haunting['top_haunting']}\033[0m")
